@@ -2,11 +2,10 @@ import struct
 import random
 import string
 import socket
+import time
 import multiprocessing
 
 def randomGen(ctrl_pipe, rand_data_queue):
-
-  cycleNo = 0
 
   while 1:
 
@@ -33,8 +32,7 @@ def randomGen(ctrl_pipe, rand_data_queue):
       for i in xrange(len(randomstr)/pkt_size):
         rand_data_queue.put( struct.pack("!I", i) + randomstr[(pkt_size*i):(pkt_size*(i+1))] )
 
-      cycleNo += 1
-      print 'GEN ', cycleNo, 'COMPLETE'
+      print time.time(),' : GEN COMPLETE'
 
 
 def ROAserver(ROAs_data_queue):
@@ -60,15 +58,22 @@ def ROAserver(ROAs_data_queue):
 
     for i in xrange(sample_length):
         roa_conn.send(ROAs_data_queue.get())
-    print 'Done'
+    print 'ROAServer Done'
 
-    print roa_conn.recv(4)
+  sock.close()
 
-  roa_conn.close()
-  s.close()
+def MOAserver
 
-#def MOAserver
+  LOCAL_SOCK = ('192.168.2.4',5576) #MOA
 
+  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # UDP
+  sock.bind(LOCAL_SOCK)
+  sock.listen(1)
+  moa_conn,moa_addr = sock.accept()
+  print 'MOAServer connected to ', roa_addr
+
+
+def testManager
 
 
 ######################## MAIN #########################
