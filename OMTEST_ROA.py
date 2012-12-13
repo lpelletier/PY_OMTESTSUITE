@@ -2,23 +2,23 @@
 
 import threading
 import Queue
-from socket import *
+import socket
 import time
 import struct
 import subprocess
 
-class TCPDataRecv(threading.Thread):
+class ROAjobMaster(threading.Thread):
 
-	def __init__(self, dataQueue, timerQueue, loggerQueue, xferEvent):
-		super(TCPDataRecv, self).__init__()
+	def __init__(self, dataQueue, timerQueue, loggerQueue, statEvent, stopEvent):
+		super(ROAjobMaster, self).__init__()
 		self.dataQueue = dataQueue
 		self.timerQueue = timerQueue
 		self.loggerQueue = loggerQueue
 		self.PCADDR = ('192.168.2.4',10002)
-		#self.DFTFPGAADDR = ('10.10.1.100', 13108)
-		#self.FPGAADDR = ('10.10.1.102', 3202)
-		self.DFTFPGAADDR = ('192.168.2.4', 13108)
-		self.FPGAADDR = ('192.168.2.4', 3202)
+		self.DFTFPGAADDR = ('10.10.1.100', 13108)
+		self.FPGAADDR = ('10.10.1.102', 3202)
+		#self.DFTFPGAADDR = ('192.168.2.4', 13108)
+		#self.FPGAADDR = ('192.168.2.4', 3202)
 		self.EMITTER_ID = '23'
 		self.EMITTER_POW = '1'
 		self.EMITTER_DIM = '1'
@@ -28,15 +28,17 @@ class TCPDataRecv(threading.Thread):
 		self.xferPeriod = 0.0
 		self.symrate = 3
 		self.cfgType = ''
+		self.lastRun = False
 		self.idle = True
-		self.xferEvent = xferEvent
+		self.statEvent = statEvent
+		self.stopEvent = stopEvent
 
 		
 
 
 	def run(self):
 
-		self.dataSock = socket( AF_INET,SOCK_STREAM)	
+		self.dataSock = socket.socket( socket.AF_INET, socket.SOCK_STREAM)	
 		self.dataSock.connect(self.PCADDR)
 		self.alive = threading.Event()
 		self.alive.set()
@@ -45,21 +47,18 @@ class TCPDataRecv(threading.Thread):
 		self.CFGPktGen()
 		self.EMCPktGen()
 
-		while self.alive.is_set():
+		while self.lastRun == False:
 			try:
 				while self.recv_data != 'START_XFER':
-						self.recv_data = self.dataSock.recv(10)
+					self.recv_data = self.dataSock.recv(10)
+					time.sleep(0.5)
 
 				self.idle = False
 
 				#Retrieve configuration
-				self.pktSize, self.pktTotal, self.xferPeriod, self.symrate = struct.unpack('!IIfI', self.dataSock.recv(16))
+				self.pktSize, self.pktTotal, self.xferPeriod, self.symrate, self.lastRun = struct.unpack('!IIfI?', self.dataSock.recv(17))
 				self.cfgType = self.dataSock.recv(3)
-
-				print 'Configuration Received: ', self.cfgType
-				print 'Packet size:', self.pktSize
-				print 'Number of Packets:', self.pktTotal
-				print 'UDP Xmit Rate: ', self.xferPeriod
+				self.loggerPut('ROA configuration received: ' + self.cfgType)
 
 				#Forward configuration to UDPTimer
 				self.timerQueue.put(self.xferPeriod)
@@ -67,9 +66,10 @@ class TCPDataRecv(threading.Thread):
 					self.INIPktGen()
 				self.CFGPktGen()
 
-				self.loggerPut('Config Done')
+				self.loggerPut('ROA Config Done, wait 5s')
+				time.sleep(5) #OM gets itself sorted out
 
-				time.sleep(10) #OM gets itself sorted out
+				self.dataSock.send('ROAREADY')
 
 				self.loggerPut('Transfer Start')
 
@@ -77,6 +77,7 @@ class TCPDataRecv(threading.Thread):
 					self.recv_data = self.dataSock.recv(self.pktSize+4)
 					if len(self.recv_data) != (self.pktSize+4):
 						self.recv_data += self.dataSock.recv(self.pktSize+4 - len(self.recv_data))
+					#if (i != 106) and (i != 422) and (i != 585) :
 					self.dataQueue.put(self.recv_data)
 
 				while self.idle != True:
@@ -85,10 +86,14 @@ class TCPDataRecv(threading.Thread):
 				self.loggerPut('Transfer Done')
 				time.sleep(5)
 
-				self.xferEvent.set()
+				self.statEvent.set()
 			
 			except Queue.Empty as e:
 				continue
+
+		self.loggerPut('STOPPING!!!')
+		self.dataSock.close()
+		self.stopEvent.set()
 
 	def join(self, timeout=None):
 		
@@ -98,8 +103,8 @@ class TCPDataRecv(threading.Thread):
 
 	def INIPktGen(self): 
 
-		#loadFpga = subprocess.call(['/root/load_fpga_WHOI', '/root/om3x_spartan6_b27.bit'], stdout=subprocess.PIPE)
-		time.sleep(5)
+		loadFpga = subprocess.call(['/root/load_fpga_WHOI', '/root/om3x_spartan6_b27.bit'], stdout=subprocess.PIPE)
+		#time.sleep(5)
 
 
 		#FPGA CONFIG
@@ -121,7 +126,7 @@ class TCPDataRecv(threading.Thread):
 		MESSAGE += struct.pack("!IH",ARMA_MAC1,ARMA_MAC2)
 		MESSAGE += struct.pack("!IH",ARMA_IP,ARMA_PORT)
 
-		sock = socket( AF_INET, SOCK_DGRAM ) # UDP
+		sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM ) # UDP
 		sock.sendto(MESSAGE, self.DFTFPGAADDR)
 		sock.close()
 
@@ -145,7 +150,7 @@ class TCPDataRecv(threading.Thread):
 		MESSAGE += struct.pack("!BB",self.symrate,0x00) 	#RX symbol rate + carrier rate
 		MESSAGE += struct.pack("!I",0x000F8001)     #Capture
 
-		sock = socket( AF_INET, SOCK_DGRAM )
+		sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 		sock.sendto(MESSAGE, self.FPGAADDR)
 		sock.close
 
@@ -158,12 +163,12 @@ class TCPDataRecv(threading.Thread):
 								self.EMITTER_POW,
 								self.EMITTER_DIM)	
 
-		sock = socket( AF_INET, SOCK_DGRAM )
+		sock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM )
 		sock.sendto(MESSAGE, self.FPGAADDR)
 		sock.close
 
 	def loggerPut(self, msgIn):
-		msg = 'TCPDataRecv - ' + str(time.time()) + ': ' + msgIn
+		msg = 'ROAjobMaster - ' + str(time.time()) + ': ' + msgIn
 		self.loggerQueue.put(msg)
 
 
@@ -174,8 +179,8 @@ class UDPDataSend(threading.Thread):
 	def __init__(self, dataQueue, tickEvent):
 		super(UDPDataSend, self).__init__()
 		self.dataQueue = dataQueue
-		#self.MOAADDR = ('10.10.1.3',10004) 
-		self.MOAADDR = ('192.168.2.4',10016) 
+		self.MOAADDR = ('10.10.1.3',10016) 
+		#self.MOAADDR = ('192.168.2.4',10016) 
 		self.alive = threading.Event()
 		self.alive.set()
 		self.tick = tickEvent
@@ -184,7 +189,7 @@ class UDPDataSend(threading.Thread):
 	def run(self):
 
 		data = ''
-		dataSock = socket( AF_INET,SOCK_DGRAM)
+		dataSock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM)
 
 		while self.alive.is_set():
 			self.tick.wait()
@@ -248,19 +253,23 @@ class ROAStatus(threading.Thread):
 
 	def run(self):
 
-		statSock = socket( AF_INET, SOCK_DGRAM ) 
+		statSock = socket.socket( socket.AF_INET, socket.SOCK_DGRAM ) 
 		statSock.bind(self.STATADDR)
 
 		while self.alive.is_set():
 
-			#data = sock.recv(63)
-			time.sleep(1)
+			data = statSock.recv(63)
+			tempList = []
+			#time.sleep(1)
 
-			#if data[0:4] == '#STA':
-			#self.new_TX = struct.unpack('!I', data[46:50])
-			self.new_TX = time.time()
+			if data[0:4] == '#STA':
+				tempList = struct.unpack('!I', data[46:50])
+				self.new_TX = tempList[0]
+			#self.new_TX = time.time()
 
 			if self.xferEvent.is_set():
+				self.loggerPut( 'ROA end of test status')
+				time.sleep(0.1)
 				self.loggerPut( str(self.new_TX - self.prev_TX) + ' Bytes transmitted' )
 				self.xferEvent.clear()
 				self.prev_TX = self.new_TX
@@ -290,14 +299,14 @@ class ROALogClient(threading.Thread):
 	def __init__(self, loggerQueue):
 		super(ROALogClient, self).__init__()
 		self.loggerQueue = loggerQueue
-		self.PCADDR = ('192.168.2.4',10014)
+		self.PCADDR = ('192.168.2.4',10012)
 		self.alive = threading.Event()
 		self.alive.set()
 
 	def run(self):
 
 		queue_data = ''
-		logSock = socket( AF_INET,SOCK_STREAM)	
+		logSock = socket.socket( socket.AF_INET, socket.SOCK_STREAM)	
 		logSock.connect(self.PCADDR)
 
 		while self.alive.is_set():
@@ -333,18 +342,30 @@ if __name__ == '__main__':
 	loggerQueue = Queue.Queue()
 	dataQueue = Queue.Queue(2048)
 	tickEvent = threading.Event()
-	xferEvent = threading.Event()
-	
-	TCPDataRecvProc = TCPDataRecv(dataQueue, timerQueue, loggerQueue, xferEvent)
-	UDPDataSendproc = UDPDataSend(dataQueue, tickEvent)
-	UDPDataTimerProc = UDPDataTimer(timerQueue, tickEvent)
-	ROALogClientProc = ROALogClient(loggerQueue)
-
-	TCPDataRecvProc.start()
-	UDPDataSendproc.start()
-	UDPDataTimerProc.start()
-	ROALogClientProc.start()
+	statEvent = threading.Event()
+	stopEvent = threading.Event()
+	stopEvent.clear()
+	statEvent.clear()
 
 
-	while True:
-		time.sleep(30)
+	JOBMASTER = ROAjobMaster(dataQueue, timerQueue, loggerQueue, statEvent, stopEvent)
+	UDPSEND = UDPDataSend(dataQueue, tickEvent)
+	UDPTIME = UDPDataTimer(timerQueue, tickEvent)
+	STATUS = ROAStatus(loggerQueue, statEvent)
+	LOG = ROALogClient(loggerQueue)
+
+	JOBMASTER.start()
+	UDPSEND.start()
+	UDPTIME.start()
+	STATUS.start()
+	LOG.start()
+
+	stopEvent.wait()
+
+	JOBMASTER.join()
+	UDPSEND.join()
+	UDPTIME.join()
+	STATUS.join()
+	LOG.join()
+
+	exit()
