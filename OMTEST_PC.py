@@ -211,7 +211,8 @@ class logServer(multiprocessing.Process):
 		self.alive = multiprocessing.Event()
 		self.alive.set()
 		self.loggerQueue = loggerQueue
-		self.filename = './omtest_log.log'
+		#Create onelogfile per day
+		self.filename = './omtest_log' + time.strftime('%Y%m%d', time.localtime(time.time())) + '.log'
 
 
 	def run(self):
@@ -230,6 +231,7 @@ class logServer(multiprocessing.Process):
 
 				data = self.loggerQueue.get()
 				LOG_FILE.write(data)
+				LOG_FILE.flush()
 
 		ROASproc.join()
 		MOASproc.join()

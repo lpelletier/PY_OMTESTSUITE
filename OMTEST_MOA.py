@@ -10,7 +10,7 @@ import subprocess
 
 class MOAjobMaster(threading.Thread):
 
-	def __init__(self, dataQueue, loggerQueue, xferEvent, statEvent, stopEvent):
+	def __init__(self, dataQueue, loggerQueue, xferEvent, statEnableEvent, getReportEvent, stopEvent):
 		super(MOAjobMaster, self).__init__()
 		self.dataQueue = dataQueue
 		self.loggerQueue = loggerQueue
@@ -30,9 +30,9 @@ class MOAjobMaster(threading.Thread):
 		self.lastRun = False
 		self.idle = True
 		self.xferEvent = xferEvent
-		self.statEvent = statEvent
+		self.statEnableEvent = statEnableEvent
+		self.getReportEvent = getReportEvent
 		self.stopEvent = stopEvent
-
 
 		
 
@@ -103,6 +103,7 @@ class MOAjobMaster(threading.Thread):
 				self.dataSock.send('MOAREADY')
 
 				startTime = time.time()
+				self.statEnableEvent.set()
 
 				while msgType != 'DONE':
 					
@@ -124,6 +125,9 @@ class MOAjobMaster(threading.Thread):
 					measBitrate = (8*self.pktSize*self.pktTotal)/(time.time()-10.0-startTime)
 					self.loggerPut('MOA packet capture done, UDP socket timed out ')
 
+
+				self.statEnableEvent.clear()
+				self.getReportEvent.clear()
 
 				droppedPackets = []
 				for i in xrange(self.pktTotal):
@@ -283,13 +287,14 @@ class UDPDataRecv(threading.Thread):
 
 class MOAStatus(threading.Thread):
 
-	def __init__(self, loggerQueue, statEvent):
+	def __init__(self, loggerQueue, enableEvent, getReportEvent):
 		super(MOAStatus, self).__init__()
 		self.STATADDR = ('10.10.1.3', 2201)
 		self.loggerQueue = loggerQueue
 		self.alive = threading.Event()
 		self.alive.set()
-		self.statEvent = statEvent
+		self.enableEvent = enableEvent
+		self.getReportEvent = getReportEvent
 		self.prev_RX = 0
 		self.new_RX = 0
 		self.FECcorr = 0
@@ -307,7 +312,7 @@ class MOAStatus(threading.Thread):
 			data = statSock.recv(63)
 			tempList = []
 
-			if data[0:4] == '#STA':
+			if data[0:4] == '#STA' and self.enableEvent.is_set():
 				tempList = struct.unpack('!I', data[39:43])
 				self.FECcorr += tempList[0]
 				tempList = struct.unpack('!B', data[45:46])
@@ -321,7 +326,7 @@ class MOAStatus(threading.Thread):
 			
 			#self.new_RX = time.time()
 
-			if self.statEvent.is_set():
+			if self.getReportEvent.is_set():
 
 				self.loggerPut( 'MOA end of test status')
 				self.loggerPut( str(self.new_RX - self.prev_RX) + ' bytes transmitted' )
@@ -330,7 +335,7 @@ class MOAStatus(threading.Thread):
 				else: self.loggerPut( str(self.FECcorr) + ' bytes corrected and drops were detected since last EOT status' )
 				
 				self.loggerPut( str(self.CRCfail) + ' bytes did not pass the RX CRC check')
-				self.statEvent.clear()
+				self.getReportEvent.clear()
 
 				self.prev_RX = self.new_RX
 				self.FECcorr = 0
@@ -401,14 +406,16 @@ if __name__ == '__main__':
 	loggerQueue = Queue.Queue()
 	dataQueue = Queue.Queue()
 	xferEvent = threading.Event()
-	statEvent = threading.Event()
+	statEnableEvent = threading.Event()
+	getReportEvent = threading.Event()
 	stopEvent = threading.Event()
 	stopEvent.clear()
-	statEvent.clear()
+	statEnableEvent.clear()
+	getReportEvent.clear()
 	
-	JOBMASTER = MOAjobMaster(dataQueue, loggerQueue, xferEvent, statEvent, stopEvent)
+	JOBMASTER = MOAjobMaster(dataQueue, loggerQueue, xferEvent, statEnableEvent, getReportEvent, stopEvent)
 	UDPRECV = UDPDataRecv(dataQueue, xferEvent)
-	STATUS = MOAStatus(loggerQueue, statEvent)
+	STATUS = MOAStatus(loggerQueue, statEnableEvent, getReportEvent)
 	LOG = MOALogClient(loggerQueue)
 
 	JOBMASTER.start()

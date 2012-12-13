@@ -9,7 +9,7 @@ import subprocess
 
 class ROAjobMaster(threading.Thread):
 
-	def __init__(self, dataQueue, timerQueue, loggerQueue, statEvent, stopEvent):
+	def __init__(self, dataQueue, timerQueue, loggerQueue, statEnableEvent, getReportEvent, stopEvent):
 		super(ROAjobMaster, self).__init__()
 		self.dataQueue = dataQueue
 		self.timerQueue = timerQueue
@@ -31,6 +31,8 @@ class ROAjobMaster(threading.Thread):
 		self.lastRun = False
 		self.idle = True
 		self.statEvent = statEvent
+		self.statEnableEvent = statEnableEvent
+		self.getReportEvent = getReportEvent
 		self.stopEvent = stopEvent
 
 		
@@ -71,6 +73,8 @@ class ROAjobMaster(threading.Thread):
 
 				self.dataSock.send('ROAREADY')
 
+				self.statEnableEvent.set()
+
 				self.loggerPut('Transfer Start')
 
 				for i in xrange(self.pktTotal):
@@ -84,6 +88,9 @@ class ROAjobMaster(threading.Thread):
 					self.idle = self.dataQueue.empty()
 
 				self.loggerPut('Transfer Done')
+				self.statEnableEvent.clear()
+				self.getReportEvent.set()
+
 				time.sleep(5)
 
 				self.statEvent.set()
@@ -240,13 +247,14 @@ class UDPDataTimer(threading.Thread):
 
 class ROAStatus(threading.Thread):
 
-	def __init__(self, loggerQueue, xferEvent):
+	def __init__(self, loggerQueue, enableEvent, getReportEvent):
 		super(ROAStatus, self).__init__()
 		self.STATADDR = ('10.10.1.2', 3201)
 		self.loggerQueue = loggerQueue
 		self.alive = threading.Event()
 		self.alive.set()
-		self.xferEvent = xferEvent
+		self.enableEvent = enableEvent
+		self.getReportEvent = getReportEvent
 		self.prev_TX = 0
 		self.new_TX = 0
 
@@ -262,15 +270,15 @@ class ROAStatus(threading.Thread):
 			tempList = []
 			#time.sleep(1)
 
-			if data[0:4] == '#STA':
+			if data[0:4] == '#STA' and self.enableEvent.is_set():
 				tempList = struct.unpack('!I', data[46:50])
 				self.new_TX = tempList[0]
 			#self.new_TX = time.time()
 
-			if self.xferEvent.is_set():
+			if self.getReportEvent.is_set():
 				self.loggerPut( 'ROA end of test status')
 				self.loggerPut( str(self.new_TX - self.prev_TX) + ' Bytes transmitted' )
-				self.xferEvent.clear()
+				self.getReportEvent.clear()
 				self.prev_TX = self.new_TX
 
 
@@ -341,16 +349,18 @@ if __name__ == '__main__':
 	loggerQueue = Queue.Queue()
 	dataQueue = Queue.Queue(2048)
 	tickEvent = threading.Event()
-	statEvent = threading.Event()
+	statEnableEvent = threading.Event()
+	getReportEvent = threading.Event()
 	stopEvent = threading.Event()
 	stopEvent.clear()
-	statEvent.clear()
+	statEnableEvent.clear()
+	getReportEvent.clear()
 
 
-	JOBMASTER = ROAjobMaster(dataQueue, timerQueue, loggerQueue, statEvent, stopEvent)
+	JOBMASTER = ROAjobMaster(dataQueue, timerQueue, loggerQueue, statEnableEvent, getReportEvent, stopEvent)
 	UDPSEND = UDPDataSend(dataQueue, tickEvent)
 	UDPTIME = UDPDataTimer(timerQueue, tickEvent)
-	STATUS = ROAStatus(loggerQueue, statEvent)
+	STATUS = ROAStatus(loggerQueue, statEnableEvent, getReportEvent)
 	LOG = ROALogClient(loggerQueue)
 
 	JOBMASTER.start()
