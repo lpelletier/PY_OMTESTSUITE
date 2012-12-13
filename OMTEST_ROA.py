@@ -168,7 +168,7 @@ class ROAjobMaster(threading.Thread):
 		sock.close
 
 	def loggerPut(self, msgIn):
-		msg = 'ROAjobMaster - ' + str(time.time()) + ': ' + msgIn
+		msg = 'ROAjobMaster - ' + str(time.time()) + ': ' + msgIn + '\n'
 		self.loggerQueue.put(msg)
 
 
@@ -269,7 +269,6 @@ class ROAStatus(threading.Thread):
 
 			if self.xferEvent.is_set():
 				self.loggerPut( 'ROA end of test status')
-				time.sleep(0.1)
 				self.loggerPut( str(self.new_TX - self.prev_TX) + ' Bytes transmitted' )
 				self.xferEvent.clear()
 				self.prev_TX = self.new_TX
@@ -287,7 +286,7 @@ class ROAStatus(threading.Thread):
 
 
 	def loggerPut(self, msgIn):
-		msg = 'ROAStat - ' + str(time.time()) + ': ' + msgIn
+		msg = 'ROAStat - ' + str(time.time()) + ': ' + msgIn + '\n'
 		self.loggerQueue.put(msg)
 
 

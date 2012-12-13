@@ -196,7 +196,7 @@ class TestServer(multiprocessing.Process):
 
 	def loggerPut(self, msgIn):
 		
-		msg = 'TestServer - ' + str(time.time()) + ': ' + msgIn
+		msg = 'TestServer - ' + str(time.time()) + ': ' + msgIn + '\n'
 		self.loggerQueue.put(msg)
 
 
@@ -229,7 +229,7 @@ class logServer(multiprocessing.Process):
 
 			data = self.loggerQueue.get()
 			with open(self.filename,'a') as LOG_FILE:
-				LOG_FILE.write(data + '\n')
+				LOG_FILE.write(data)
 
 		ROASproc.join()
 		MOASproc.join()
@@ -243,11 +243,11 @@ class logServer(multiprocessing.Process):
 		sock.bind(LOCAL_SOCK)
 		sock.listen(1)
 		sock_conn, sock_addr = sock.accept()
-		loggerQueue.put('logWorker - ' + str(time.time()) + ': ' + 'Connected to ' + str(sock_addr))
+		loggerQueue.put('logWorker - ' + str(time.time()) + ': ' + 'Connected to ' + str(sock_addr) + '\n')
 
 		while alive.is_set():
 
-			recv_data = sock_conn.recv(2048)
+			recv_data = sock_conn.recv(1024)
 			loggerQueue.put(recv_data)
 
 		sock.close()
@@ -261,7 +261,7 @@ class logServer(multiprocessing.Process):
 
 	def loggerPut(self, msgIn):
 		
-		msg = 'logServer - ' + str(time.time()) + ': ' + msgIn
+		msg = 'logServer - ' + str(time.time()) + ': ' + msgIn + '\n'
 		self.loggerQueue.put(msg)
 
 

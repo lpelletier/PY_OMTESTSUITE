@@ -131,9 +131,7 @@ class MOAjobMaster(threading.Thread):
 						droppedPackets.append(i)
 
 				print 'Dropped:', droppedPackets
-				time.sleep(0.1)
 				self.loggerPut(str(len(droppedPackets)) + ' Packets were dropped')
-				time.sleep(0.1)
 				self.loggerPut('Measured bitrate is: ' + str(measBitrate) + 'bps')
 
 				
@@ -209,7 +207,7 @@ class MOAjobMaster(threading.Thread):
 
 
 	def loggerPut(self, msgIn):
-		msg = 'MOAjobMaster - ' + str(time.time()) + ': ' + msgIn
+		msg = 'MOAjobMaster - ' + str(time.time()) + ': ' + msgIn +'\n'
 		self.loggerQueue.put(msg)
 
 
@@ -324,17 +322,14 @@ class MOAStatus(threading.Thread):
 			#self.new_RX = time.time()
 
 			if self.statEvent.is_set():
+
 				self.loggerPut( 'MOA end of test status')
-				time.sleep(0.1)
 				self.loggerPut( str(self.new_RX - self.prev_RX) + ' bytes transmitted' )
-				time.sleep(0.1)
-				if self.FECfail == False:
-					self.loggerPut( str(self.FECcorr) + ' bytes corrected and no drops were detected since last EOT status' )
-				else:
-					self.loggerPut( str(self.FECcorr) + ' bytes corrected and drops were detected since last EOT status' )
-				time.sleep(0.1)
-				self.loggerPut( str(self.CRCfail) + ' bytes did not pass the RX CRC check')
+
+				if self.FECfail == False: self.loggerPut( str(self.FECcorr) + ' bytes corrected and no drops were detected since last EOT status' )
+				else: self.loggerPut( str(self.FECcorr) + ' bytes corrected and drops were detected since last EOT status' )
 				
+				self.loggerPut( str(self.CRCfail) + ' bytes did not pass the RX CRC check')
 				self.statEvent.clear()
 
 				self.prev_RX = self.new_RX
@@ -355,7 +350,7 @@ class MOAStatus(threading.Thread):
 
 
 	def loggerPut(self, msgIn):
-		msg = 'MOAStat - ' + str(time.time()) + ': ' + msgIn
+		msg = 'MOAStat - ' + str(time.time()) + ': ' + msgIn + '\n'
 		self.loggerQueue.put(msg)
 
 
