@@ -217,18 +217,18 @@ class logServer(multiprocessing.Process):
 	def run(self):
 
 		with open(self.filename,'a') as LOG_FILE:
-				LOG_FILE.write('\n\n\n\n\n\n')
 
-		data = ''
-		ROASproc = threading.Thread(target=self.worker, args=(self.loggerQueue, self.alive, ('192.168.2.4',10012)))
-		MOASproc = threading.Thread(target=self.worker, args=(self.loggerQueue, self.alive, ('192.168.1.4',10014)))
-		ROASproc.start()
-		MOASproc.start()
+			LOG_FILE.write('\n\n\n\n\n\n')
+
+			data = ''
+			ROASproc = threading.Thread(target=self.worker, args=(self.loggerQueue, self.alive, ('192.168.2.4',10012)))
+			MOASproc = threading.Thread(target=self.worker, args=(self.loggerQueue, self.alive, ('192.168.1.4',10014)))
+			ROASproc.start()
+			MOASproc.start()
 		
-		while self.alive.is_set():
+			while self.alive.is_set():
 
-			data = self.loggerQueue.get()
-			with open(self.filename,'a') as LOG_FILE:
+				data = self.loggerQueue.get()
 				LOG_FILE.write(data)
 
 		ROASproc.join()
