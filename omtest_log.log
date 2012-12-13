@@ -19253,3 +19253,21 @@ MOAStat - 2267.32784: 237 bytes corrected and drops were detected since last EOT
 ROAjobMaster - 2273.649933: STOPPING!!!
 ROAStat - 2274.44263: ROA end of test status
 ROAStat - 2274.543897: 5412378 Bytes transmitted
+
+
+
+
+
+
+TestServer - 1355417222.43: Initial program launch at 1355417222.43
+TestServer - 1355417301.32: Connected to ROA at ('192.168.2.11', 53099)
+logWorker - 1355417301.43: Connected to ('192.168.2.11', 41033)
+
+
+
+
+
+
+TestServer - 1355417410.64: Initial program launch at 1355417410.64
+TestServer - 1355417448.56: Connected to ROA at ('192.168.2.11', 43839)
+logWorker - 1355417448.66: Connected to ('192.168.2.11', 40282)
